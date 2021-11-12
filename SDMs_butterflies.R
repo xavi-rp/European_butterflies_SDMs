@@ -3,7 +3,7 @@
 ####        European butterflies           ####
 ###############################################
 
-wd <- "/Users/xavi_rp/Documents/D5_FFGRCC/butterflies_SDMs"
+wd <- "/Users/xavi_rp/Documents/D5_FFGRCC/European_butterflies_SDMs_data"
 setwd(wd)
 
 library(tidyr)
@@ -68,11 +68,14 @@ for (t in taxons){
   #print(t)
   t0 <- Sys.time()
   sps <- spcies[spcies$taxons == t, "sps"]
+  
   print(paste0("running... ", sps))
+  
+  dir2save <- paste0("models_", t, "/")
   if(!dir.exists(paste0("models_", t))) {
-    dir2save <- paste0("models_", t, "/")
     dir.create(dir2save)
   }
+  
   occs_i <- occs_all[occs_all$sp2 %in% t, c("decimalLongitude", "decimalLatitude")]
   
   occs_i_shp <- SpatialPointsDataFrame(coords = occs_i[, c("decimalLongitude", "decimalLatitude")],
@@ -131,7 +134,7 @@ for (t in taxons){
   # selecting optimal model
   results <- eval.results(modl)
   results
-  View(results)
+  #View(results)
   optimal <- results %>% filter(delta.AICc == 0)
   optimal
   
