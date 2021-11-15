@@ -12,6 +12,8 @@ library(raster)
 library(dplyr)
 library(dismo)
 library(data.table)
+library(virtualspecies)
+library(terra)
 
 
 ## Predictors ####
@@ -32,12 +34,33 @@ worldclim_all <- stack("worldclim_all.tif")
 worldclim_all
 plot(worldclim_all[[3]])
 
+# removing collinearity
+vables_NoC <- removeCollinearity(worldclim_all,
+                                 multicollinearity.cutoff = 0.70,
+                                 select.variables = TRUE,  # if TRUE, randomly select one variable of the group. If FALSE, returns a list with the groups
+                                 sample.points = TRUE,
+                                 nb.points = 10^6,
+                                 plot = TRUE)
+vables_NoC
+save(vables_NoC, file = "vables_NoC.RData")
+dev.copy(png, "multicollinearity.png")
+dev.off()
+
+worldclim_all <- subset(worldclim_all, vables_NoC)
+worldclim_all <- rast(worldclim_all)
+terra::writeRaster(worldclim_all, filename = "worldclim_all_NoCor.tif", 
+                   names = vables_NoC,
+                   overwrite = TRUE)
+worldclim_all <- brick("worldclim_all_NoCor.tif")
+load("vables_NoC.RData", verbose = TRUE)
+names(worldclim_all) <- vables_NoC
+
 worldclim_all_data <- as.data.frame(worldclim_all)
 worldclim_all_data <- worldclim_all_data[complete.cases(worldclim_all_data), ]
 head(worldclim_all_data)
 nrow(worldclim_all_data)
 
-write.csv(worldclim_all_data, "worldclim_all_data.csv", row.names = FALSE)
+write.csv(worldclim_all_data, "worldclim_all_data_NoCor.csv", row.names = FALSE)
 worldclim_all_data
 
 
@@ -69,6 +92,7 @@ tbl <- table(occs_all$species)
 ordr <- names(sort(tbl))
 spcies <- data.frame(taxons = unique(occs_all$sp2), sps = unique(occs_all$species))
 spcies <- spcies[match(ordr, spcies$sps),]
+spcies
 taxons <- spcies$taxons
 
 
@@ -166,9 +190,10 @@ for (t in taxons){
   save(modl, file = paste0(dir2save, "opt_model_", t, ".RData"))
   
   # making predictions
-  worldclim_all_data <- fread("worldclim_all_data.csv", header = TRUE)
-  names(worldclim_all_data) <- gsub("wc2.1_30s_bio_", "worldclim_all.", names(worldclim_all_data))
-  names(worldclim_all_data) <- gsub("wc2.1_30s_elev", "worldclim_all.20", names(worldclim_all_data))
+  worldclim_all_data <- fread("worldclim_all_data_NoCor.csv", header = TRUE)
+  names(worldclim_all_data) <- gsub("wc2.1_30s_bio_", "worldclim_all_NoCor.", names(worldclim_all_data))
+  names(worldclim_all_data) <- gsub("wc2.1_30s_elev", "worldclim_all_NoCor.20", names(worldclim_all_data))
+  names(worldclim_all_data) <- gsub("worldclim_all", "worldclim_all_NoCor", names(worldclim_all_data))
   worldclim_all_data <- worldclim_all_data[complete.cases(worldclim_all_data), ]
   sps_predictions_maxent <- predict(object = modl, 
                                     newdata = worldclim_all_data, 
