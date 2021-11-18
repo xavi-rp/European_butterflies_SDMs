@@ -3,7 +3,21 @@
 ####        European butterflies           ####
 ###############################################
 
-wd <- "/Users/xavi_rp/Documents/D5_FFGRCC/European_butterflies_SDMs_data"
+
+if(Sys.info()[4] == "D01RI1700308") {
+  wd <- ""
+}else if(Sys.info()[4] == "S-JRCIPRAP320P") {
+  wd <- ""
+}else if(Sys.info()[4] %in% c("jeodpp-terminal-jd001-03", "jeodpp-terminal-03")) {
+  if(!dir.exists("/eos/jeodpp/home/users/rotllxa/European_butterflies_SDMs_data/")) 
+    dir.create("/eos/jeodpp/home/users/rotllxa/European_butterflies_SDMs_data/")
+  wd <- "/eos/jeodpp/home/users/rotllxa/European_butterflies_SDMs_data/"
+  gbif_creds <- "/home/rotllxa/Documents/"
+}else{
+  wd <- "/Users/xavi_rp/Documents/D5_FFGRCC/European_butterflies_SDMs_data"
+  gbif_creds <- "/Users/xavi_rp/Dropbox/GBIF_credentials/"
+}
+
 setwd(wd)
 
 library(tidyr)
@@ -34,6 +48,16 @@ worldclim_all <- stack("worldclim_all.tif")
 worldclim_all
 plot(worldclim_all[[3]])
 
+
+lc_dir <- "/eos/jeodpp/home/users/rotllxa/land_cover/"
+lc1km_files <- list.files(lc_dir, full.names = TRUE)[grepl("lc1km_", list.files(lc_dir))]
+lc1km_files
+lc1km_all <- stack(lc1km_files)
+lc1km_all
+
+
+worldclim_all <- stack(worldclim_all, lc1km_all)
+
 # removing collinearity
 vables_NoC <- removeCollinearity(worldclim_all,
                                  multicollinearity.cutoff = 0.70,
@@ -51,8 +75,10 @@ worldclim_all <- rast(worldclim_all)
 terra::writeRaster(worldclim_all, filename = "worldclim_all_NoCor.tif", 
                    names = vables_NoC,
                    overwrite = TRUE)
+
 worldclim_all <- brick("worldclim_all_NoCor.tif")
-load("vables_NoC.RData", verbose = TRUE)
+worldclim_all
+load("vables_NoC.RData", verbose = TRUE) ; vables_NoC
 names(worldclim_all) <- vables_NoC
 
 worldclim_all_data <- as.data.frame(worldclim_all)
@@ -86,6 +112,7 @@ dev.off()
 ## Butterflies Occurrences ####
 
 occs_all <- read.csv("sp_records_20211109.csv", header = TRUE)
+occs_all <- read.csv("sp_records_20211117.csv", header = TRUE)
 head(occs_all)
 table(occs_all$species)
 tbl <- table(occs_all$species)
@@ -145,7 +172,8 @@ for (t in taxons){
                       algorithm = 'maxnet', 
                       partitions = 'block', 
                       tune.args = list(
-                        fc = c("L","LQ","LQH","H"),
+                        #fc = c("L","LQ","LQH","H"),
+                        fc = c("L","LQ","LQH"),  # removed "H" because there is some bug in maxnet that gives error for some species
                         #fc = c("L","LQ"),
                         rm = c(1, 2, 5)
                         #rm = 1:2
@@ -158,10 +186,11 @@ for (t in taxons){
   modl@results
   #View(modl@results)
   write.csv(modl@results, file = paste0(dir2save, "ENMeval_results_", t, ".csv"))
+  save(modl, file = paste0(dir2save, "models_", t, ".RData"))
   #evalplot.stats(e = modl, stats = "or.mtp", color = "fc", x.var = "rm")
   
   occurrences_train <- modl@occs
-  occurrences_test <- nrow(modl@occs.testing)  # none because crossvalidation
+  occurrences_test <- nrow(modl@occs.testing)  # none because cross-validation
   background_pts <- nrow(modl@bg)
   
   # selecting optimal model
@@ -187,13 +216,13 @@ for (t in taxons){
   modl <- modl@models[[optimal$tune.args]]
   gc()
   
-  save(modl, file = paste0(dir2save, "opt_model_", t, ".RData"))
+  #save(modl, file = paste0(dir2save, "opt_model_", t, ".RData"))
   
   # making predictions
   worldclim_all_data <- fread("worldclim_all_data_NoCor.csv", header = TRUE)
-  names(worldclim_all_data) <- gsub("wc2.1_30s_bio_", "worldclim_all_NoCor.", names(worldclim_all_data))
-  names(worldclim_all_data) <- gsub("wc2.1_30s_elev", "worldclim_all_NoCor.20", names(worldclim_all_data))
-  names(worldclim_all_data) <- gsub("worldclim_all", "worldclim_all_NoCor", names(worldclim_all_data))
+  names(worldclim_all_data) <- gsub("wc2.1_30s_bio_", "worldclim_all.", names(worldclim_all_data))
+  names(worldclim_all_data) <- gsub("wc2.1_30s_elev", "worldclim_all.20", names(worldclim_all_data))
+  #names(worldclim_all_data) <- gsub("worldclim_all", "worldclim_all", names(worldclim_all_data))
   worldclim_all_data <- worldclim_all_data[complete.cases(worldclim_all_data), ]
   sps_predictions_maxent <- predict(object = modl, 
                                     newdata = worldclim_all_data, 
@@ -247,15 +276,15 @@ for (t in taxons){
   ## Creating presence/absence map
   # Threshold: minimum presence
   
-  threshold1 <- min(extract(sps_preds_rstr, occs_i_shp))
-  threshold1 <- quantile(extract(sps_preds_rstr, occs_i_shp), 0.1) # sensitivity = 0.9
-  threshold1
+  #threshold1 <- min(extract(sps_preds_rstr, occs_i_shp))
+  #threshold1 <- quantile(extract(sps_preds_rstr, occs_i_shp), 0.1)#, na.rm = TRUE) # sensitivity = 0.9
+  #threshold1
   
   threshold2 <- dismo::threshold(evaluate(extract(sps_preds_rstr, occs_i_shp), extract(sps_preds_rstr, bckgr))) # sensitibity default 0.9
-  threshold2
+  threshold2 <- as.numeric(threshold2$sensitivity)
   
-  a <- c(0, threshold1, 0)
-  b <- c(threshold1, 1, 1)
+  a <- c(0, threshold2, 0)
+  b <- c(threshold2, 1, 1)
   thr <- rbind(a, b)
   
   sps_preds_rstr_pres_abs <- reclassify(sps_preds_rstr, rcl = thr, filename = '', include.lowest = FALSE, right = TRUE)
@@ -268,7 +297,7 @@ for (t in taxons){
   plot(sps_preds_rstr, zlim = c(0, 1), main = "Occurrences (GBIF - 1km)", cex.main = 2, cex.sub = 1.5, legend = FALSE)
   plot(occs_i_shp, add = TRUE, col = "black")
   plot(sps_preds_rstr, zlim = c(0, 1), main = "MaxEnt predictions (cloglog)", cex.main = 2, cex.sub = 1.5)
-  plot(sps_preds_rstr_pres_abs, main = "Presence-Absence", sub = "Threshold = 10th Percentile training presences", 
+  plot(sps_preds_rstr_pres_abs, main = "Presence-Absence", sub = "Threshold: Sensitivity = 0.9", 
        cex.main = 2, cex.sub = 1.5, legend = FALSE)
   title(list(paste0(sps),
              cex = 4), 
