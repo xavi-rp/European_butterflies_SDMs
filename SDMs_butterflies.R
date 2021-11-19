@@ -123,6 +123,11 @@ spcies
 taxons <- spcies$taxons
 
 
+
+## Modelling ####
+
+info_models <- c()
+
 for (t in taxons){
   #print(t)
   t0 <- Sys.time()
@@ -136,6 +141,7 @@ for (t in taxons){
   }
   
   occs_i <- occs_all[occs_all$sp2 %in% t, c("decimalLongitude", "decimalLatitude")]
+  occurrences_GBIF <- nrow(occs_i)
   
   occs_i_shp <- SpatialPointsDataFrame(coords = occs_i[, c("decimalLongitude", "decimalLatitude")],
                                        data = data.frame(sp = rep(1, nrow(occs_i))),
@@ -158,6 +164,7 @@ for (t in taxons){
   # data set for presences
   sps_data_presences <- sps_data[layer == 1, ]
   sps_data_presences <- sps_data_presences[complete.cases(sps_data_presences), ]
+  occurrences_1km <- nrow(sps_data_presences)
   rm(sps_data); gc()
   
   # data set for pseudo-absences
@@ -189,9 +196,11 @@ for (t in taxons){
   save(modl, file = paste0(dir2save, "models_", t, ".RData"))
   #evalplot.stats(e = modl, stats = "or.mtp", color = "fc", x.var = "rm")
   
+  
   occurrences_train <- modl@occs
   occurrences_test <- nrow(modl@occs.testing)  # none because cross-validation
-  background_pts <- nrow(modl@bg)
+  background_points <- nrow(modl@bg)
+  
   
   # selecting optimal model
   results <- eval.results(modl)
@@ -280,8 +289,10 @@ for (t in taxons){
   #threshold1 <- quantile(extract(sps_preds_rstr, occs_i_shp), 0.1)#, na.rm = TRUE) # sensitivity = 0.9
   #threshold1
   
-  threshold2 <- dismo::threshold(evaluate(extract(sps_preds_rstr, occs_i_shp), extract(sps_preds_rstr, bckgr))) # sensitibity default 0.9
-  threshold2 <- as.numeric(threshold2$sensitivity)
+  thresholds <- dismo::threshold(evaluate(extract(sps_preds_rstr, occs_i_shp), extract(sps_preds_rstr, bckgr))) # sensitibity default 0.9
+  thresholds
+  threshold2 <- as.numeric(thresholds$sensitivity)
+  threshold_used <- threshold2
   
   a <- c(0, threshold2, 0)
   b <- c(threshold2, 1, 1)
@@ -305,7 +316,18 @@ for (t in taxons){
   
   dev.off()
   
-  print(paste0(t, " run in: ", (Sys.time() - t0)))
+  
+  running_time <- as.vector(Sys.time() - t0)
+  
+  data2save <- (data.frame(species = t, occurrences_GBIF, occurrences_1km, occurrences_train,
+                occurrences_test, background_points, optimal,
+                thresholds, threshold_used))
+  rownames(data2save) <- t
+  
+  info_models <- rbind(info_models, data2save)
+  write.csv(info_models, "info_modelling_all_species.csv", row.names = FALSE)
+  
+  print(paste0(t, " run in: ", running_time))
 }
 
 

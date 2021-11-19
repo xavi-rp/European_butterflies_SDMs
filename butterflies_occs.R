@@ -112,7 +112,7 @@ GetBIF(credentials = paste0(gbif_creds, "/gbif_credentials.RData"),
        #download_years = c(2000, 2021),
        download_years = c(1980, 2021),
        download_coords = c(-13, 48, 35, 72), #order: xmin, xmax, ymin, ymax
-       download_coords_accuracy = c(0, 100),
+       download_coords_accuracy = c(0, 250),
        rm_dupl = TRUE,
        cols2keep = c("species", "decimalLatitude", "decimalLongitude", #"elevation",
                      "gbifID",
