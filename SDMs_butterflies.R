@@ -57,28 +57,36 @@ lc1km_all
 
 
 worldclim_all <- stack(worldclim_all, lc1km_all)
+plot(worldclim_all[[5]])
+
 
 # removing collinearity
 vables_NoC <- removeCollinearity(worldclim_all,
-                                 multicollinearity.cutoff = 0.70,
+                                 #multicollinearity.cutoff = 0.70,
+                                 multicollinearity.cutoff = 0.85,
                                  select.variables = TRUE,  # if TRUE, randomly select one variable of the group. If FALSE, returns a list with the groups
                                  sample.points = TRUE,
                                  nb.points = 10^6,
                                  plot = TRUE)
 vables_NoC
-save(vables_NoC, file = "vables_NoC.RData")
-dev.copy(png, "multicollinearity.png")
+#save(vables_NoC, file = "vables_NoC.RData")
+save(vables_NoC, file = "vables_NoC_085.RData")
+#dev.copy(png, "multicollinearity.png")
+dev.copy(png, "multicollinearity_085.png")
 dev.off()
 
 worldclim_all <- subset(worldclim_all, vables_NoC)
 worldclim_all <- rast(worldclim_all)
-terra::writeRaster(worldclim_all, filename = "worldclim_all_NoCor.tif", 
+#terra::writeRaster(worldclim_all, filename = "worldclim_all_NoCor.tif", 
+terra::writeRaster(worldclim_all, filename = "worldclim_all_NoCor_085.tif", 
                    names = vables_NoC,
                    overwrite = TRUE)
 
-worldclim_all <- brick("worldclim_all_NoCor.tif")
+worldclim_all <- brick("worldclim_all_NoCor_085.tif")
+#worldclim_all <- brick("worldclim_all_NoCor.tif")
 worldclim_all
-load("vables_NoC.RData", verbose = TRUE) ; vables_NoC
+#load("vables_NoC.RData", verbose = TRUE) ; vables_NoC
+load("vables_NoC_085.RData", verbose = TRUE) ; vables_NoC
 names(worldclim_all) <- vables_NoC
 
 worldclim_all_data <- as.data.frame(worldclim_all)
@@ -86,7 +94,9 @@ worldclim_all_data <- worldclim_all_data[complete.cases(worldclim_all_data), ]
 head(worldclim_all_data)
 nrow(worldclim_all_data)
 
-write.csv(worldclim_all_data, "worldclim_all_data_NoCor.csv", row.names = FALSE)
+#write.csv(worldclim_all_data, "worldclim_all_data_NoCor.csv", row.names = FALSE)
+#write.csv(worldclim_all_data, "worldclim_all_data_NoCor_085.csv", row.names = FALSE)
+write.csv(worldclim_all_data, "worldclim_all_data.csv", row.names = FALSE)
 worldclim_all_data
 
 
@@ -197,7 +207,7 @@ for (t in taxons){
   #evalplot.stats(e = modl, stats = "or.mtp", color = "fc", x.var = "rm")
   
   
-  occurrences_train <- modl@occs
+  occurrences_train <- nrow(modl@occs)
   occurrences_test <- nrow(modl@occs.testing)  # none because cross-validation
   background_points <- nrow(modl@bg)
   
@@ -228,7 +238,9 @@ for (t in taxons){
   #save(modl, file = paste0(dir2save, "opt_model_", t, ".RData"))
   
   # making predictions
-  worldclim_all_data <- fread("worldclim_all_data_NoCor.csv", header = TRUE)
+  #worldclim_all_data <- fread("worldclim_all_data_NoCor.csv", header = TRUE)
+  #worldclim_all_data <- fread("worldclim_all_data_NoCor_085.csv", header = TRUE)
+  worldclim_all_data <- fread("worldclim_all_data.csv", header = TRUE)
   names(worldclim_all_data) <- gsub("wc2.1_30s_bio_", "worldclim_all.", names(worldclim_all_data))
   names(worldclim_all_data) <- gsub("wc2.1_30s_elev", "worldclim_all.20", names(worldclim_all_data))
   #names(worldclim_all_data) <- gsub("worldclim_all", "worldclim_all", names(worldclim_all_data))
@@ -325,6 +337,8 @@ for (t in taxons){
   rownames(data2save) <- t
   
   info_models <- rbind(info_models, data2save)
+  #write.csv(info_models, "info_modelling_all_species.csv", row.names = FALSE)
+  #write.csv(info_models, "info_modelling_all_species_085.csv", row.names = FALSE)
   write.csv(info_models, "info_modelling_all_species.csv", row.names = FALSE)
   
   print(paste0(t, " run in: ", running_time))
@@ -333,15 +347,89 @@ for (t in taxons){
 
 
 
+## Checking results ####
+
+info_models_070 <- read.csv("results01_Multicol07/info_modelling_all_species.csv", header = TRUE)
+info_models_085 <- read.csv("results01_Multicol085/info_modelling_all_species_085.csv", header = TRUE)
+info_models <- read.csv("info_modelling_all_species.csv", header = TRUE)
+View(info_models)
+
+mean(info_models$auc.val.avg)
+mean(info_models$auc.train)
+mean(info_models$cbi.val.avg)
+mean(info_models$cbi.train)
+
+
+## Correlations of CBI (or AUC) against number of occurrences
+plot(info_models$cbi.val.avg,)
+
+plot(info_models$cbi.val.avg ~ info_models$occurrences_train,
+     xlab = "", ylab = "",
+     ylim=c(0.5, 1)
+     #xlab = "Number of occurrences for training",
+     #ylab = "CBI-validation"
+     )
+par(new=TRUE)
+plot(info_models$cbi.train ~ info_models$occurrences_train,
+     xlab = "Number of occurrences for training",
+     ylab = "CBI: training (blue),  validation (black)",
+     col = "lightblue", ylim=c(0.5, 1)
+     )
+abline(lm(info_models$cbi.val.avg ~ info_models$occurrences_train), col = "red") # regression line (y~x)
+summary(lm(info_models$cbi.val.avg ~ info_models$occurrences_train))
+
+## AUC
+plot(info_models$auc.val.avg ~ info_models$occurrences_train,
+     xlab = "Number of occurrences for training",
+     ylab = "AUC-validation")
+abline(lm(info_models$auc.val.avg ~ info_models$occurrences_train), col = "red") # regression line (y~x)
+
+
+plot(info_models$auc.val.avg ~ info_models$occurrences_train,
+     xlab = "", ylab = "",
+     ylim=c(0.5, 1)
+     #xlab = "Number of occurrences for training",
+     #ylab = "AUC-validation"
+)
+par(new=TRUE)
+plot(info_models$auc.train ~ info_models$occurrences_train,
+     xlab = "Number of occurrences for training",
+     ylab = "AUC: training (blue),  validation (black)",
+     col = "lightblue", ylim=c(0.5, 1)
+)
+
+summary(lm(info_models$auc.val.avg ~ info_models$occurrences_train))
+summary(lm(info_models$auc.train ~ info_models$occurrences_train))
 
 
 
 
+## Comp. multicollinearity at 0.7, at 0.85 and not removing correlated variables
+
+models070 <- data.frame(mean(info_models_070$auc.val.avg),
+                        mean(info_models_070$auc.train),
+                        mean(info_models_070$cbi.val.avg),
+                        mean(info_models_070$cbi.train), row.names = "multicol_070")
+col_names <- c("AUC.val", "AUC.train", "CBI.val", "CBI.train")
+colnames(models070) <- col_names
+
+models085 <- data.frame(mean(info_models_085$auc.val.avg),
+                        mean(info_models_085$auc.train),
+                        mean(info_models_085$cbi.val.avg),
+                        mean(info_models_085$cbi.train), row.names = "multicol_085")
+colnames(models085) <- col_names
 
 
+models <- data.frame(mean(info_models$auc.val.avg),
+                     mean(info_models$auc.train),
+                     mean(info_models$cbi.val.avg),
+                     mean(info_models$cbi.train), row.names = "multicol_100")
+colnames(models) <- col_names
 
 
-
+models070_085_100 <- rbind(models070, models085, models)
+models070_085_100  # both AUC and CBI for testing give better results with multic = 1.00 (all variables)
+                   # The presence/absence maps seems to improve with multicol = 0.85
 
 
 
