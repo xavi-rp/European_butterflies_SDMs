@@ -138,6 +138,13 @@ taxons <- spcies$taxons
 
 info_models <- c()
 
+# Threshold to use for converting to presence/absence
+# Options: kappa,  spec_sens, no_omission, prevalence, equal_sens_spec, sensitivity
+
+threshold2use <- "sensitivity"    # deffault 0.9
+#threshold2use <- "no_omission"    # keeping all presences
+
+
 for (t in taxons){
   #print(t)
   t0 <- Sys.time()
@@ -218,6 +225,7 @@ for (t in taxons){
   #View(results)
   optimal <- results %>% filter(delta.AICc == 0)
   optimal
+  if(nrow(optimal) > 1) optimal <- optimal[1, ]
   
   modl_args <- eval.models(modl)[[optimal$tune.args]]
   modl_args$betas
@@ -303,7 +311,8 @@ for (t in taxons){
   
   thresholds <- dismo::threshold(evaluate(extract(sps_preds_rstr, occs_i_shp), extract(sps_preds_rstr, bckgr))) # sensitibity default 0.9
   thresholds
-  threshold2 <- as.numeric(thresholds$sensitivity)
+  #threshold2 <- as.numeric(thresholds$sensitivity)
+  threshold2 <- as.numeric(thresholds[names(thresholds) %in% threshold2use])
   threshold_used <- threshold2
   
   a <- c(0, threshold2, 0)
@@ -320,7 +329,9 @@ for (t in taxons){
   plot(sps_preds_rstr, zlim = c(0, 1), main = "Occurrences (GBIF - 1km)", cex.main = 2, cex.sub = 1.5, legend = FALSE)
   plot(occs_i_shp, add = TRUE, col = "black")
   plot(sps_preds_rstr, zlim = c(0, 1), main = "MaxEnt predictions (cloglog)", cex.main = 2, cex.sub = 1.5)
-  plot(sps_preds_rstr_pres_abs, main = "Presence-Absence", sub = "Threshold: Sensitivity = 0.9", 
+  plot(sps_preds_rstr_pres_abs, main = "Presence-Absence", 
+       #sub = "Threshold: Sensitivity = 0.9", 
+       sub = paste0("Threshold: '", threshold2use, "'"), 
        cex.main = 2, cex.sub = 1.5, legend = FALSE)
   title(list(paste0(sps),
              cex = 4), 
